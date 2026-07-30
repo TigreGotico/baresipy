@@ -4,9 +4,9 @@
 
 A python wrapper around [baresip](https://github.com/baresip/baresip), the portable SIP user-agent.
 
-Use it to place and receive VoIP calls from python: dial out, answer inbound calls, stream
-text-to-speech or arbitrary audio into a call, send/receive DTMF, transcribe what a caller says,
-and build interactive voice bots — with or without a SIP registrar, with or without a sound card.
+Use it to place and receive VoIP calls from python. You can dial out, answer inbound calls, stream
+text-to-speech or arbitrary audio into a call, send and receive DTMF, transcribe what a caller says,
+and build interactive voice bots, with or without a SIP registrar, with or without a sound card.
 
 ## Install
 
@@ -15,7 +15,7 @@ sudo apt-get install baresip ffmpeg   # Debian/Ubuntu, see docs/setup.md for oth
 pip install baresipy
 ```
 
-`baresip` is the SIP engine baresipy drives via `pexpect`; `ffmpeg` is used by `pydub` for audio
+`baresip` is the SIP engine baresipy drives through `pexpect`. `ffmpeg` is used by `pydub` for audio
 conversion. See [docs/setup.md](docs/setup.md) for per-distro install commands, SIP account
 requirements, and troubleshooting.
 
@@ -123,7 +123,7 @@ See [docs/ovos-integration.md](docs/ovos-integration.md) for the complete walkth
 | [examples/secure_trunk.py](examples/secure_trunk.py) | registered account over TLS transport + SRTP media |
 | [examples/gateway_client.py](examples/gateway_client.py) | driving `baresipy-gateway` over HTTP/WebSocket |
 | [examples/contact_list.py](examples/contact_list.py) | local JSON contact store |
-| examples/ivr_menu.py | IVR menu (DTMF-driven call routing) - not yet added, see [docs/call-control.md](docs/call-control.md) for the DTMF primitives it will use |
+| [examples/ivr_menu.py](examples/ivr_menu.py) | IVR menu (DTMF-driven call routing), see [docs/ivr.md](docs/ivr.md) |
 
 See [docs/call-control.md](docs/call-control.md) for transfer, DTMF, barge-in, and call-metadata
 details used across these examples.
@@ -135,24 +135,32 @@ details used across these examples.
 | Registered SIP account calls | `BareSIP(user, pwd, gateway)` |
 | Registrar-less direct SIP calls | `BareSIP()` + `call("sip:user@ip:5060")`, see [docs/direct-calls.md](docs/direct-calls.md) |
 | Headless operation (no sound card) | `BareSIP(headless=True)` |
-| Text-to-speech into a call | `speak()` via any [OPM](https://github.com/OpenVoiceOS/ovos-plugin-manager) TTS plugin |
+| Text-to-speech into a call | `speak()` through any [OPM](https://github.com/OpenVoiceOS/ovos-plugin-manager) TTS plugin |
 | Arbitrary audio into a call | `send_audio(path)` |
 | DTMF (send/receive) | `send_dtmf(digits, mode="keys")`, `handle_dtmf_received()` |
 | Recording inbound call audio | `record_rx=True`, `get_rx_wav()` / `get_rx_stream()` |
+| IVR phone menus | `baresipy.ivr.IVRPhone`, see [docs/ivr.md](docs/ivr.md) |
 | OVOS microphone plugin | `baresipy.ovos.BareSIPMicrophone` |
 | Local contact list | `baresipy.contacts.ContactList` |
 | Event-driven call handling | override `handle_*` methods |
 
 ## Documentation
 
-- [docs/setup.md](docs/setup.md) — system dependencies, install, verifying with a first call, troubleshooting
-- [docs/configuration.md](docs/configuration.md) — config directory, `render_config`, full `BareSIP` constructor reference
-- [docs/call-control.md](docs/call-control.md) — transfer, DTMF, barge-in, call metadata, login retries
-- [docs/direct-calls.md](docs/direct-calls.md) — registrar-less/direct SIP mode
-- [docs/ovos-integration.md](docs/ovos-integration.md) — building a full OVOS voice bot
-- [docs/http-gateway.md](docs/http-gateway.md) — driving baresipy over HTTP/WebSocket via `baresipy-gateway`
-- [docs/docker.md](docs/docker.md) — container image usage and the e2e rig
-- [docs/testing.md](docs/testing.md) — running and writing tests
+- [docs/setup.md](docs/setup.md): system dependencies, install, verifying with a first call, troubleshooting
+- [docs/configuration.md](docs/configuration.md): config directory, `render_config`, full `BareSIP` constructor reference
+- [docs/call-control.md](docs/call-control.md): transfer, DTMF, barge-in, call metadata, login retries
+- [docs/direct-calls.md](docs/direct-calls.md): registrar-less/direct SIP mode
+- [docs/ivr.md](docs/ivr.md): declarative IVR phone-tree menus
+- [docs/ovos-integration.md](docs/ovos-integration.md): building a full OVOS voice bot
+- [docs/http-gateway.md](docs/http-gateway.md): driving baresipy over HTTP/WebSocket through `baresipy-gateway`
+- [docs/docker.md](docs/docker.md): container image usage and the e2e rig
+- [docs/testing.md](docs/testing.md): running and writing tests
+
+## Related projects
+
+- [OpenVoiceOS](https://openvoiceos.org): the voice-assistant platform baresipy's optional STT/VAD/TTS pipeline is built on
+- [ovos-plugin-manager](https://github.com/OpenVoiceOS/ovos-plugin-manager): the plugin factory system used to load STT, VAD, and TTS engines
+- [phoonnx](https://github.com/TigreGotico/phoonnx): the default TTS engine used by `speak()`/`say()`
 
 ## Credits
 

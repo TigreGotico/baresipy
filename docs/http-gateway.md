@@ -1,7 +1,7 @@
 # HTTP/WebSocket gateway
 
 `baresipy.server` exposes a `BareSIP` phone over a FastAPI HTTP + WebSocket API, so you can drive
-calls, TTS, DTMF and audio from any language/process instead of embedding baresipy directly in
+calls, TTS, DTMF, and audio from any language or process instead of embedding baresipy directly in
 your python application.
 
 ## Install
@@ -11,7 +11,7 @@ pip install baresipy[server]
 ```
 
 This pulls in `fastapi`, `uvicorn`, and `python-multipart`. Plain `import baresipy` never needs
-them; only `baresipy.server` does, and it raises a clear `ImportError` naming this extra if it's
+them; only `baresipy.server` does, and it raises a clear `ImportError` naming this extra if it is
 missing.
 
 ## Running
@@ -31,21 +31,21 @@ Useful flags:
 | `--auto-answer` / `--no-auto-answer` | on | auto-accept inbound calls vs. wait for `POST /accept` |
 | `--token` | `$BARESIPY_TOKEN` | bearer token required on every route, see Auth below |
 
-A phone only handles one call at a time. To run more than one line concurrently, start multiple
+A phone handles only one call at a time. To run more than one line concurrently, start multiple
 `baresipy-gateway` processes with distinct `--config-path`/ports (pass `BARESIPY_TOKEN` per
 process, or reuse the same config directory only if the phones never overlap).
 
 ## Auth
 
-If a token is configured (`--token` or `BARESIPY_TOKEN` env var), every HTTP route requires:
+If you configure a token (`--token` or `BARESIPY_TOKEN` env var), every HTTP route requires:
 
 ```
 Authorization: Bearer <token>
 ```
 
-and both WebSocket routes require the same header on the connection handshake, or the server
-closes the socket with code `4001`. With no token configured, the gateway is open — put it behind
-your own auth/network boundary in that case.
+Both WebSocket routes require the same header on the connection handshake, or the server closes
+the socket with code `4001`. With no token configured, the gateway is open. Put it behind your own
+auth/network boundary in that case.
 
 ## Endpoints
 
@@ -53,23 +53,23 @@ All request/response bodies are JSON unless noted.
 
 | method | path | body | responses |
 |---|---|---|---|
-| GET | `/status` | — | `200 {status, current_call, ready, running}` |
+| GET | `/status` |: | `200 {status, current_call, ready, running}` |
 | POST | `/call` | `{"uri": "sip:..."}` | `200 {"ok": true}` · `409` already in a call |
-| POST | `/accept` | — | `200` · `409` no incoming call |
-| POST | `/hangup` | — | `200` · `409` no active call |
-| POST | `/hold` | — | `200` · `409` no active call |
-| POST | `/resume` | — | `200` · `409` no active call |
+| POST | `/accept` |: | `200` · `409` no incoming call |
+| POST | `/hangup` |: | `200` · `409` no active call |
+| POST | `/hold` |: | `200` · `409` no active call |
+| POST | `/resume` |: | `200` · `409` no active call |
 | POST | `/speak` | `{"text": "..."}` | `200` · `409` no established call · `503` no TTS configured |
 | POST | `/dtmf` | `{"digits": "123", "mode": "keys"}` | `200` · `409` no call (mode=`keys`) · `422` invalid mode |
 | POST | `/audio` | multipart file upload, field `file` | `200` · `409` no established call |
-| WS | `/ws/events` | — | streams call-lifecycle events as JSON |
-| WS | `/ws/audio` | — | streams resampled caller audio as PCM16 frames |
+| WS | `/ws/events` |: | streams call-lifecycle events as JSON |
+| WS | `/ws/audio` |: | streams resampled caller audio as PCM16 frames |
 
 `mode` for `/dtmf` is `"keys"` (real RTP telephone-events, needs an established call) or
 `"audio"` (synthesized in-band tones, mirrors `BareSIP.send_dtmf`).
 
-`/audio` accepts wav/mp3/anything `pydub`+`ffmpeg` can decode — the upload is saved to a temp
-file and passed through `BareSIP.convert_audio`.
+`/audio` accepts wav/mp3/anything `pydub`+`ffmpeg` can decode. The server saves the upload to a
+temp file and passes it through `BareSIP.convert_audio`.
 
 ## curl examples
 
@@ -93,8 +93,8 @@ curl -s -X POST http://localhost:8000/hangup
 curl -s http://localhost:8000/status -H 'Authorization: Bearer your_token_here'
 ```
 
-The examples below use the `websockets` package (`pip install websockets`) for the client side —
-it is not a baresipy dependency, just a convenient async WebSocket client.
+The examples below use the `websockets` package (`pip install websockets`) for the client side.
+It is not a baresipy dependency, just a convenient async WebSocket client.
 
 ## `/ws/events`
 
@@ -119,9 +119,9 @@ asyncio.run(main())
 ## `/ws/audio`
 
 Streams the caller's audio while a call is established, resampled to 16kHz mono PCM16 (same
-format as `baresipy.audio.resample_pcm16`/`BareSIPMicrophone`). Requires the gateway to have been
-started with `--record-rx` (the default). If recording wasn't enabled, or no rx recording ever
-appeared, the server closes the socket with code `4003`.
+format as `baresipy.audio.resample_pcm16`/`BareSIPMicrophone`). This route requires the gateway to
+have been started with `--record-rx` (the default). If recording was not enabled, or no rx
+recording ever appeared, the server closes the socket with code `4003`.
 
 Message sequence:
 
@@ -129,8 +129,8 @@ Message sequence:
 2. Binary frames of raw PCM16 little-endian audio, as they arrive
 3. One JSON text message `{"event": "eof"}` when the call ends, then the socket closes
 
-Python client example, writing the stream to your own processing pipeline (e.g. feeding an STT
-engine):
+Python client example, writing the stream to your own processing pipeline (for example feeding an
+STT engine):
 
 ```python
 import asyncio
@@ -170,21 +170,21 @@ New endpoints added on top of the table above:
 | method | path | body | responses |
 |---|---|---|---|
 | POST | `/transfer` | `{"uri": "sip:..."}` | `200 {"ok": true}` · `409` no active call |
-| POST | `/stop_audio` | — | `200 {"ok": true}` |
-| GET | `/calls` | — | `200` list of finished/current call records, newest first |
+| POST | `/stop_audio` |: | `200 {"ok": true}` |
+| GET | `/calls` |: | `200` list of finished/current call records, newest first |
 
-`/transfer` blind-transfers the active call via `BareSIP.transfer` (SIP REFER, `menu` module).
+`/transfer` blind-transfers the active call through `BareSIP.transfer` (SIP REFER, `menu` module).
 
 `/stop_audio` interrupts any in-flight `/speak` or `/audio` playback immediately (barge-in),
-calling `BareSIP.stop_audio`. Safe to call with no active call.
+calling `BareSIP.stop_audio`. It is safe to call with no active call.
 
 `/calls` returns `phone.call_history` serialized as JSON objects (one per finished call, plus the
 current in-progress call if any), each with `uri`, `user`, `host`, `direction`, `started`, `ended`,
 `reason`, `dtmf`, and `call_id`.
 
-`GatewayPhone` now assigns a `call_id` (a `uuid4` hex string) per call, generated when a call
-starts (incoming or outgoing) and included as `"call_id"` in every `/ws/events` payload's `data`
-for that call, so a client can group events belonging to the same call together.
+`GatewayPhone` assigns a `call_id` (a `uuid4` hex string) per call, generated when a call starts
+(incoming or outgoing) and included as `"call_id"` in every `/ws/events` payload's `data` for that
+call, so a client can group events belonging to the same call together.
 
 ```bash
 curl -s -X POST http://localhost:8000/transfer -H 'content-type: application/json' \
@@ -194,3 +194,6 @@ curl -s -X POST http://localhost:8000/stop_audio
 
 curl -s http://localhost:8000/calls
 ```
+
+---
+[← OVOS integration](ovos-integration.md) · [Home](../README.md) · [Docker →](docker.md)

@@ -5,9 +5,9 @@ login retries.
 
 ## Transfer
 
-`transfer(uri)` sends a SIP REFER (via baresip's `menu` module `/transfer` command) moving the
-active call to another destination. Override `handle_transfer_ok()`/`handle_transfer_failed()` to
-react to the outcome:
+`transfer(uri)` sends a SIP REFER (through baresip's `menu` module `/transfer` command) that
+moves the active call to another destination. Override `handle_transfer_ok()`/
+`handle_transfer_failed()` to react to the outcome:
 
 ```python
 class Receptionist(BareSIP):
@@ -30,17 +30,17 @@ See [examples/call_transfer.py](../examples/call_transfer.py).
 `send_dtmf(digits, mode=...)` supports two modes:
 
 - `mode="keys"` (recommended) presses the digit keys on the baresip console, sending real RTP
-  telephone-events (RFC 4733) - what SIP peers actually decode as DTMF.
-- `mode="audio"` (default, for backwards compatibility) synthesizes in-band DTMF tones and streams
-  them as call audio - audible over the line, but not guaranteed to be decoded as DTMF events by
-  every peer.
+  telephone-events (RFC 4733). This is what SIP peers actually decode as DTMF.
+- `mode="audio"` (default, for backward compatibility) synthesizes in-band DTMF tones and streams
+  them as call audio. These tones are audible over the line, but not every peer is guaranteed to
+  decode them as DTMF events.
 
 ```python
 b.send_dtmf("123", mode="keys")
 ```
 
-Incoming DTMF from the caller is reported via `handle_dtmf_received(char, duration)` and appended
-to `current_call_info.dtmf`.
+Incoming DTMF from the caller is reported through `handle_dtmf_received(char, duration)` and
+appended to `current_call_info.dtmf`.
 
 ## Barge-in / interruptible speech
 
@@ -53,7 +53,7 @@ class Agent(BareSIP):
     def handle_audio_interrupted(self):
         LOG.info("caller interrupted playback")
 
-    # elsewhere, eg. from a VAD loop watching caller audio:
+    # elsewhere, e.g. from a VAD loop watching caller audio:
     def on_caller_speech_detected(self):
         self.stop_audio()
 ```
@@ -64,8 +64,8 @@ voice agent built on an energy-based VAD over `get_rx_stream()`.
 ## Call metadata
 
 `current_call_info` (a `CallInfo`) holds the active call's `uri`/`user`/`host`/`direction`/
-`started`/`dtmf`, and is `None` when not in a call. When a call ends it's finalized (`ended`/
-`reason` set) and appended to `call_history` (capped at the last 100 calls):
+`started`/`dtmf`, and is `None` when not in a call. When a call ends, baresipy finalizes it
+(`ended`/`reason` set) and appends it to `call_history` (capped at the last 100 calls):
 
 ```python
 if b.current_call_info:
@@ -77,19 +77,22 @@ for call in b.call_history[-5:]:
 
 ## Login retries
 
-By default a registration failure calls `handle_login_failure()` (which `quit()`s the instance)
-immediately. Pass `max_login_retries`/`login_retry_delay` to retry instead:
+By default a registration failure calls `handle_login_failure()` immediately, which `quit()`s the
+instance. Pass `max_login_retries`/`login_retry_delay` to retry instead:
 
 ```python
 b = BareSIP(user, pwd, gateway, max_login_retries=3, login_retry_delay=10.0)
 ```
 
-`handle_login_retry(attempt)` is called before each retry; `handle_login_failure()` is still
-called once `max_login_retries` is exhausted. See
+`handle_login_retry(attempt)` is called before each retry. `handle_login_failure()` still runs
+once `max_login_retries` is exhausted. See
 [examples/secure_trunk.py](../examples/secure_trunk.py).
 
 ## See also
 
-- [docs/configuration.md](configuration.md) — full `BareSIP` constructor reference
-- [docs/direct-calls.md](direct-calls.md) — registrar-less/direct SIP mode
-- [docs/ovos-integration.md](ovos-integration.md) — STT/VAD/TTS pipeline over `BareSIPMicrophone`
+- [docs/configuration.md](configuration.md): full `BareSIP` constructor reference
+- [docs/direct-calls.md](direct-calls.md): registrar-less/direct SIP mode
+- [docs/ovos-integration.md](ovos-integration.md): STT/VAD/TTS pipeline over `BareSIPMicrophone`
+
+---
+[← Configuration](configuration.md) · [Home](../README.md) · [Direct calls →](direct-calls.md)

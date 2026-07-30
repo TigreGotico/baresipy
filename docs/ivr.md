@@ -5,9 +5,9 @@ call flows without hand-rolling DTMF state machines.
 
 ## Concepts
 
-- `IVRNode` - one menu: a spoken `prompt` plus a mapping of DTMF digit -> option.
-- `IVRSession` - runs one caller through a tree of `IVRNode`s on an active call.
-- `IVRPhone` - a ready-made `BareSIP` subclass that auto-answers and runs one `IVRSession` per
+- `IVRNode`: one menu: a spoken `prompt` plus a mapping of DTMF digit to option.
+- `IVRSession`: runs one caller through a tree of `IVRNode`s on an active call.
+- `IVRPhone`: a ready-made `BareSIP` subclass that auto-answers and runs one `IVRSession` per
   call, forwarding DTMF automatically.
 
 ## `IVRNode`
@@ -33,19 +33,19 @@ root = IVRNode(
 
 Each entry in `options` is one of:
 
-- an **`IVRNode`** - descend into a submenu; `"back"` in the submenu returns here
-- a **callable** `(session: IVRSession) -> None` - run an action (e.g. speak some text, look
-  something up), then re-speak the current menu's prompt
-- `"hangup"` - end the call
-- `"transfer:<uri>"` - blind-transfer the call to `<uri>` (`BareSIP.transfer`)
-- `"back"` - return to the previous menu (only meaningful inside a submenu)
-- `"repeat"` - just re-speak the current prompt
+- an **`IVRNode`**: descend into a submenu; `"back"` in the submenu returns here
+- a **callable** `(session: IVRSession) -> None`: run an action (for example speak some text,
+  look something up), then re-speak the current menu's prompt
+- `"hangup"`: end the call
+- `"transfer:<uri>"`: blind-transfer the call to `<uri>` (`BareSIP.transfer`)
+- `"back"`: return to the previous menu (only meaningful inside a submenu)
+- `"repeat"`: just re-speak the current prompt
 
 If the caller presses an unmapped digit, or does not press anything before `timeout` seconds
-elapse, the node's `invalid_prompt`/`timeout_prompt` is spoken and the prompt repeats, up to
+elapse, the node speaks its `invalid_prompt`/`timeout_prompt` and repeats the prompt, up to
 `max_retries` times. After that, `fallback` runs (`"hangup"` by default).
 
-Pressing any digit interrupts (barges in on) whatever is currently playing, via
+Pressing any digit interrupts (barges in on) whatever is currently playing, through
 `BareSIP.stop_audio()`.
 
 ## `IVRSession`
@@ -59,7 +59,7 @@ session.path            # -> ["1", "2"] - digits pressed so far, in order
 session.stop()           # abort a running session from another thread
 ```
 
-`IVRSession` only needs digits delivered to it - it does not read them off the wire itself. Feed
+`IVRSession` only needs digits delivered to it. It does not read them off the wire itself. Feed
 digits in from a `BareSIP.handle_dtmf_received` override:
 
 ```python
@@ -92,3 +92,6 @@ phone = IVRPhone(user, pwd, gateway, ivr=root)
 daemon thread per call, ending the session automatically when the call ends.
 
 See [examples/ivr_menu.py](../examples/ivr_menu.py) for a complete runnable demo.
+
+---
+[← Direct calls](direct-calls.md) · [Home](../README.md) · [OVOS integration →](ovos-integration.md)

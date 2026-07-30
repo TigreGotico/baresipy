@@ -17,20 +17,20 @@ pip install -e .[test]
 pytest test/
 ```
 
-`pyproject.toml` sets `addopts = "-m 'not e2e'"`, so end-to-end tests (which need docker and are
-slow) are deselected by default and only unit tests run.
+`pyproject.toml` sets `addopts = "-m 'not e2e'"`, so end-to-end tests (which need docker and run
+slowly) are deselected by default. Only unit tests run.
 
 Test files, by area:
 
-- `test/test_state_machine.py` — `BareSIP._handle_output_line()` parsing/state transitions
-- `test/test_config.py` — `render_config()` / `ensure_sndfile_recording()`
-- `test/test_audio.py` — `WavTailReader`
-- `test/test_resample.py` — `resample_pcm16()`
-- `test/test_tts.py` — `get_default_tts()`
-- `test/test_contacts.py` — `ContactList`
-- `test/test_import.py`, `test/test_ovos_optional.py` — import-time behavior, incl. that
+- `test/test_state_machine.py`: `BareSIP._handle_output_line()` parsing/state transitions
+- `test/test_config.py`: `render_config()` / `ensure_sndfile_recording()`
+- `test/test_audio.py`: `WavTailReader`
+- `test/test_resample.py`: `resample_pcm16()`
+- `test/test_tts.py`: `get_default_tts()`
+- `test/test_contacts.py`: `ContactList`
+- `test/test_import.py`, `test/test_ovos_optional.py`: import-time behavior, including that
   `import baresipy` never requires `ovos-plugin-manager`, and that `import baresipy.ovos` raises
-  a clear `ImportError` naming the `[ovos]` extra when it's missing
+  a clear `ImportError` naming the `[ovos]` extra when it is missing
 
 ## End-to-end rig
 
@@ -42,11 +42,11 @@ results:
 pytest test/ -m e2e
 ```
 
-Requires docker and docker compose to be available; not run by default (see `addopts` above).
+This rig requires docker and docker compose. It does not run by default (see `addopts` above).
 
 ## Adding tests
 
-Most unit tests don't need a real baresip process. Use the fake-`pexpect` pattern from
+Most unit tests do not need a real baresip process. Use the fake-`pexpect` pattern from
 `test/test_state_machine.py` to construct a `BareSIP` instance without spawning anything or
 touching `~/.baresipy`:
 
@@ -65,7 +65,7 @@ def make_baresip(**kwargs):
     return bs
 ```
 
-`autostart=False` skips starting the event-loop thread; `config_path` points at a throwaway temp
+`autostart=False` skips starting the event-loop thread. `config_path` points at a throwaway temp
 directory so the test never reads or writes the real `~/.baresipy/config`. With the instance
 constructed this way, feed it raw baresip output lines directly and assert on the resulting state
 or on which `handle_*` method fired:
@@ -78,6 +78,8 @@ h.assert_called_once()
 assert bs.ready
 ```
 
-Tests live under `test/` (a single flat test directory, not `tests/`). New e2e-only tests should
-be marked `@pytest.mark.e2e` (registered in `pyproject.toml`) so they're excluded from the default
-run.
+Tests live under `test/` (a single flat test directory, not `tests/`). Mark new e2e-only tests
+`@pytest.mark.e2e` (registered in `pyproject.toml`) so the default run excludes them.
+
+---
+[← Docker](docker.md) · [Home](../README.md)
