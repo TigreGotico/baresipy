@@ -2,6 +2,8 @@ from os.path import isdir
 from typing import Optional
 import re
 
+from baresipy.utils.log import LOG
+
 DEFAULT = """#
 # baresip configuration
 #
@@ -230,13 +232,53 @@ def ensure_sndfile_recording(config: str, snd_path: str) -> str:
     :param config: baresip config file contents
     :param snd_path: directory where call recordings should be written
     """
-    if "#module			sndfile.so" in config:
-        config = config.replace(
-            "#module			sndfile.so", "module			sndfile.so")
-    elif "module			sndfile.so" not in config:
-        config = config.replace(
-            "module			vumeter.so",
-            "module			vumeter.so\nmodule			sndfile.so", 1)
+    # whitespace-tolerant match: some user-provided configs use spaces
+    # instead of tabs between "module" and the module name, so do not
+    # rely on the exact tab-formatted DEFAULT template bytes.
+    sndfile_line = re.compile(
+        r"^([ \t]*)(#[ \t]*)?module([ \t]+)sndfile\.so[ \t]*$",
+        re.MULTILINE)
+    module_line = re.compile(
+        r"^([ \t]*)#?module([ \t]+)\S+\.so[ \t]*$", re.MULTILINE)
+
+    match = sndfile_line.search(config)
+    if match:
+        # module line already present, commented or not - make sure it is
+        # active, preserving the original indentation/spacing style
+        leading, _comment, sep = match.group(1), match.group(2), \
+            match.group(3)
+        config = config[:match.start()] + \
+            leading + "module" + sep + "sndfile.so" + config[match.end():]
+    else:
+        # no sndfile.so line at all - insert one after the last known
+        # "module ..." line so it lands in the modules section
+        last_module = None
+        for m in module_line.finditer(config):
+            last_module = m
+        if last_module is not None:
+            # reuse the same separator style (tabs vs spaces) as the
+            # anchor line so the inserted line matches the surrounding
+            # config's formatting
+            sep = last_module.group(2)
+            config = config[:last_module.end()] + \
+                "\nmodule" + sep + "sndfile.so" + config[last_module.end():]
+        else:
+            # config has no recognizable modules section at all - this is
+            # unexpected for a real baresip config, but still try to make
+            # recording work rather than failing silently
+            config = config.rstrip("\n") + \
+                "\n\n# added by baresipy to enable call recording\n" \
+                "module\t\tsndfile.so\n"
+            LOG.warning(
+                "baresip config has no 'module ...' lines - added a "
+                "standalone sndfile.so module line, but this config may "
+                "be malformed and rx recording might not work")
+
+    final_match = sndfile_line.search(config)
+    if final_match is None or final_match.group(0).lstrip().startswith("#"):
+        LOG.warning(
+            "failed to enable the sndfile.so module in the baresip "
+            "config - call recording (record_rx) will not work")
 
     if "snd_path" in config:
         config = re.sub(r"^snd_path\s+.*$", "snd_path\t\t" + snd_path,
