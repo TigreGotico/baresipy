@@ -595,6 +595,20 @@ class BareSIP(Thread):
         if error == "failed to set audio-source (No such device)":
             self.handle_audio_stream_failure()
 
+    def handle_audio_source_error(self, error: str) -> None:
+        """Called whenever baresip reports it could not set an
+        audio-source, eg "(No such device)", "(Function not
+        implemented)", "(No such file or directory)", etc - baresip
+        appends whatever errno text applies. Override this to react to
+        or recover from audio-source failures.
+
+        Note this does not, by itself, hang up the call - the one
+        special case that does (the exact "(No such device)" variant)
+        is handled separately via `handle_error`/
+        `handle_audio_stream_failure`, preserving prior behaviour.
+        """
+        LOG.warning("audio-source failure: " + error)
+
     def handle_unhandled_output(self, output: str) -> None:
         LOG.info("Received unhandled output: '{0}'".format(output))
 
@@ -704,8 +718,14 @@ class BareSIP(Thread):
                     self.handle_call_timestamp(ts)
         elif "failed to set audio-source (" in out:
             # the error reason is interpolated by baresip (errno text),
-            # eg "(No such device)" / "(Function not implemented)"
-            self.handle_error(out[out.index("failed to set audio-source ("):])
+            # eg "(No such device)" / "(Function not implemented)" /
+            # "(No such file or directory)". handle_error preserves the
+            # existing "(No such device)" -> hangup special case;
+            # handle_audio_source_error is the new overridable hook that
+            # every variant reaches, without adding any new hangups.
+            error = out[out.index("failed to set audio-source ("):]
+            self.handle_error(error)
+            self.handle_audio_source_error(error)
         elif "terminated by signal" in out or "ua: stop all" in \
                 out:
             self.running = False
