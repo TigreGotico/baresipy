@@ -53,7 +53,9 @@ class BareSIP(Thread):
                  max_login_retries: int = 0,
                  login_retry_delay: float = 15.0,
                  media_encryption: Optional[str] = None,
-                 sip_cafile: Optional[str] = None):
+                 sip_cafile: Optional[str] = None,
+                 audio_frame_rate: int = 48000,
+                 audio_channels: int = 2):
         """
         :param max_login_retries: if > 0, retry registration this many
             times (with `login_retry_delay` seconds between attempts)
@@ -69,6 +71,15 @@ class BareSIP(Thread):
         :param sip_cafile: path to a CA bundle used to verify the SIP
             server certificate. Required for real verification when
             `transport="tls"` is used.
+        :param audio_frame_rate: frame rate (Hz) used when converting
+            audio for playback/transmission via `convert_audio`.
+            Defaults to 48000 (previous hardcoded behaviour). Some
+            backends reject 48kHz aufile playback (#16, #18) and need
+            a different value.
+        :param audio_channels: channel count used when converting audio
+            for playback/transmission via `convert_audio`. Defaults to
+            2 (previous hardcoded behaviour). Some backends reject
+            stereo aufile playback (#16, #18) and need mono (1).
         """
         config_path = config_path or join("~", ".baresipy")
         self.config_path = expanduser(config_path)
@@ -160,6 +171,8 @@ class BareSIP(Thread):
         self.max_login_retries = max_login_retries
         self.login_retry_delay = login_retry_delay
         self._login_retry_count = 0
+        self.audio_frame_rate = audio_frame_rate
+        self.audio_channels = audio_channels
         self.baresip = pexpect.spawn(_find_baresip_binary() + ' -f ' + self.config_path)
         super().__init__()
         if autostart:
@@ -424,7 +437,9 @@ class BareSIP(Thread):
             LOG.error("Can't send audio without an active call!")
             return 0.0
         self._tx_interrupted = False
-        wav_file, duration = self.convert_audio(wav_file)
+        wav_file, duration = self.convert_audio(
+            wav_file, frame_rate=self.audio_frame_rate,
+            channels=self.audio_channels)
         # send audio stream
         LOG.info("transmitting audio")
         self.do_command("/ausrc aufile," + wav_file)
@@ -481,7 +496,9 @@ class BareSIP(Thread):
 
     def play(self, audio_file: str, blocking: bool = True) -> None:
         if not audio_file.endswith(".wav"):
-            audio_file, duration = self.convert_audio(audio_file)
+            audio_file, duration = self.convert_audio(
+                audio_file, frame_rate=self.audio_frame_rate,
+                channels=self.audio_channels)
         self.audio = self._play_wav(audio_file, blocking=blocking)
 
     def stop_playing(self) -> None:
