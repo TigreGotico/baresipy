@@ -1,0 +1,23 @@
+name: Publish Stable Release
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master, main]
+
+permissions:
+  contents: write   # required for version bump commit and release tag
+
+jobs:
+  publish_stable:
+    if: github.actor != 'github-actions[bot]'
+    uses: OpenVoiceOS/gh-automations/.github/workflows/publish-stable.yml@dev
+    secrets:
+      PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+      MATRIX_TOKEN: ${{ secrets.MATRIX_TOKEN }}
+    with:
+      version_file: 'baresipy/version.py'
+      publish_pypi: true
+      publish_release: true
+      sync_dev: true
+      notify_matrix: true

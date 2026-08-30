@@ -1,6 +1,9 @@
 from json_database import JsonDatabase
-from os.path import expanduser, join, isdir
+from os.path import expanduser, join, isdir, isfile, dirname
 from os import makedirs
+from typing import Optional
+
+from baresipy.utils.log import LOG
 
 
 class ContactExists(ValueError):
@@ -12,14 +15,18 @@ class ContactDoesNotExist(ValueError):
 
 
 class ContactList:
-    def __init__(self, database_name="contacts.db"):
-        db_dir = join(expanduser("~"), ".baresip")
+    def __init__(self, database_name: str = "contacts.db",
+                 db_dir: Optional[str] = None):
+        db_dir = db_dir or join(expanduser("~"), ".baresip")
         if not isdir(db_dir):
             makedirs(db_dir)
         self.db_path = join(db_dir, database_name)
 
-    def import_baresip_contacts(self):
+    def import_baresip_contacts(self) -> None:
         db_dir = join(expanduser("~"), ".baresip", "contacts")
+        if not isfile(db_dir):
+            LOG.warning(f"baresip contacts file not found: {db_dir}")
+            return
         with open(db_dir) as f:
             lines = f.readlines()
 
@@ -36,8 +43,12 @@ class ContactList:
             else:
                 self.update_contact(user, address)
 
-    def export_baresip_contacts(self):
+    def export_baresip_contacts(self) -> None:
         db_dir = join(expanduser("~"), ".baresip", "contacts")
+        if not isdir(dirname(db_dir)):
+            makedirs(dirname(db_dir))
+        if not isfile(db_dir):
+            open(db_dir, "w").close()
         with JsonDatabase("contacts", self.db_path) as db:
             users = db.search_by_key("url")
         with open(db_dir) as f:

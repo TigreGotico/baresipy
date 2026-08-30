@@ -1,0 +1,13 @@
+name: Repo Health
+
+on:
+  pull_request:
+    branches: [dev, master, main]
+  workflow_dispatch:
+
+jobs:
+  repo_health:
+    uses: OpenVoiceOS/gh-automations/.github/workflows/repo-health.yml@dev
+    secrets: inherit
+    with:
+      version_file: 'baresipy/version.py'
