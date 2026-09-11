@@ -10,7 +10,7 @@ import time
 from os.path import join
 
 from _common import SHARED, write_status, write_json, \
-    headless_config_with_sip_listen
+    headless_config_with_sip_listen, codec_modules_enabled
 
 from baresipy import BareSIP
 
@@ -56,6 +56,8 @@ def main() -> None:
                 recording_path=join(SHARED, "callee_rx"),
                 config_path=CONFIG_PATH, autostart=True, block=True)
     write_status("callee", "spawned and ready for instructions")
+    write_json("callee_codecs.json",
+               {"callee_codec_modules": codec_modules_enabled(bs.config)})
 
     # stay up long enough for the caller container to dial in, exchange
     # audio/DTMF and hang up, then exit cleanly so `docker compose ... down`

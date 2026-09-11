@@ -123,9 +123,11 @@ working.
 ## Troubleshooting
 
 **No sound card / running on a server or in a container**: pass `headless=True`. This swaps
-baresip's audio source for `ausine` (a synthesized sine tone) and its player for `aufile`
-(writes to `/dev/null`), so no ALSA/PulseAudio device is required. Servers, containers, and voice
-bots all use this mode. See [docs/docker.md](docker.md).
+baresip's audio source and player for `aubridge`, a virtual audio device with no underlying
+file, so no ALSA/PulseAudio device is required. `aubridge` replaces baresip's `ausine` module,
+which only supports 48kHz and drops a call the moment it negotiates a different codec rate,
+such as G.711 at 8kHz. Servers, containers, and voice bots all use this mode. See
+[docs/docker.md](docker.md).
 
 **`failed to set audio-source (Function not implemented)`** (or `No such device`): baresip
 tried to open a real sound driver that is not available in the environment. Either install or fix

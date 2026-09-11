@@ -14,7 +14,7 @@ from os.path import getsize, join
 from pydub.generators import Sine
 
 from _common import SHARED, write_status, write_json, \
-    headless_config_with_sip_listen
+    headless_config_with_sip_listen, codec_modules_enabled
 
 from baresipy import BareSIP
 
@@ -62,6 +62,7 @@ def main() -> int:
         "rx_wav_size": 0,
         "rx_non_silent": False,
         "rx_rms": None,
+        "caller_codec_modules": None,
     }
 
     bs = Caller(user="caller", headless=True, record_rx=True,
@@ -89,6 +90,7 @@ def main() -> int:
 
         results["call_established"] = bool(bs.established)
         results["caller_dtmf_received"] = list(bs.dtmf_received)
+        results["caller_codec_modules"] = codec_modules_enabled(bs.config)
 
         rx_wav = bs.get_rx_wav(timeout=5)
         results["rx_wav"] = rx_wav

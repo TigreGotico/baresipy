@@ -11,7 +11,8 @@ from threading import Thread
 from typing import List, Optional, Tuple, Union
 from baresipy.utils.log import LOG
 from baresipy.tts import get_default_tts
-from baresipy.config import render_config, ensure_sndfile_recording
+from baresipy.config import render_config, ensure_sndfile_recording, \
+    AUBRIDGE_IDLE_NAME
 from baresipy.audio import WavTailReader
 from baresipy.call import CallInfo, parse_sip_uri
 from os.path import expanduser, join, isfile, isdir, getmtime
@@ -86,7 +87,8 @@ class BareSIP(Thread):
         if not isdir(self.config_path):
             makedirs(self.config_path)
 
-        self._default_ausrc = "ausine,400" if headless else audio_driver
+        self._default_ausrc = AUBRIDGE_IDLE_NAME if headless else \
+            audio_driver
 
         self.record_rx = record_rx
         self.recording_path = None
