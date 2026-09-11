@@ -148,7 +148,7 @@ class BareSIP(Thread):
         self.sip_cafile = sip_cafile
         self._login = None
         if self.gateway:
-            self._login = "sip:{u}@{g};transport={t};auth_pass={p}".format(
+            self._login = "<sip:{u}@{g};transport={t}>;auth_pass={p}".format(
                 u=self.user, p=self.pwd, g=self.gateway, t=self.transport)
             if login_options:
                 self._login += ";{o}".format(o=login_options)
