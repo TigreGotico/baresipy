@@ -4,6 +4,10 @@ import re
 
 from baresipy.utils.log import LOG
 
+# name of the virtual aubridge.so device used as baresip's idle audio
+# source in headless mode - see render_config()'s headless branch
+AUBRIDGE_IDLE_NAME = "aubridge,baresipy-idle"
+
 DEFAULT = """#
 # baresip configuration
 #
@@ -301,9 +305,15 @@ def render_config(audio_driver: str = "alsa,default",
     :param audio_driver: value passed to `audio_source`/`audio_player`/
         `audio_alert` when not headless, eg "alsa,default" or "pulse,default"
     :param headless: if True, do not load any real sound hardware modules
-        (alsa.so/pulse.so). Instead use `ausine.so` as the audio source and
-        `aufile.so` for playback, so baresip can run without any sound card
-        present (see github issues #16/#17)
+        (alsa.so/pulse.so). Instead use `aubridge.so`, a virtual audio
+        device with no underlying file, as the idle audio source, and
+        `aufile.so` (writing to /dev/null) for playback, so baresip can run
+        without any sound card present (see github issues #16/#17/#60).
+        `ausine.so` only supports 48kHz and drops any call negotiating a
+        different codec rate (eg G.711 at 8kHz) about 300ms after answer;
+        `aufile.so` pointed at a file hits end-of-file and kills the audio
+        the same way once the file is exhausted. `aubridge.so` has neither
+        limitation.
     :param audio_path: if a directory, patch `audio_path` to point at it; if
         False-y but not None, disable sound file loading entirely
     :param enable_sndfile: if True, activate the `sndfile.so` module so
@@ -320,20 +330,19 @@ def render_config(audio_driver: str = "alsa,default",
     if headless:
         config = config.replace(
             "audio_player		alsa,default",
-            "audio_player		aufile,/dev/null")
+            "audio_player		" + AUBRIDGE_IDLE_NAME)
         config = config.replace(
             "audio_source		alsa,default",
-            "audio_source		ausine,400")
+            "audio_source		" + AUBRIDGE_IDLE_NAME)
         config = config.replace(
             "audio_alert		alsa,default",
             "audio_alert		aufile,/dev/null")
         config = config.replace(
             "module			alsa.so\nmodule			pulse.so",
             "#module			alsa.so\n#module			pulse.so")
-        if "module			ausine.so" not in config:
-            config = config.replace(
-                "module			aufile.so\n",
-                "module			aufile.so\nmodule			ausine.so\n", 1)
+        config = config.replace(
+            "#module			aubridge.so",
+            "module			aubridge.so")
     else:
         config = config.replace("audio_player		alsa,default",
                                  "audio_player		" + audio_driver)

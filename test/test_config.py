@@ -27,12 +27,16 @@ class TestRenderConfig(unittest.TestCase):
         self.assertIn("#module\t\t\talsa.so", config)
         self.assertIn("#module\t\t\tpulse.so", config)
 
-    def test_headless_uses_ausine_and_aufile(self):
+    def test_headless_uses_aubridge_idle_source(self):
         config = render_config(headless=True)
-        self.assertIn("audio_source\t\tausine,400", config)
-        self.assertIn("audio_player\t\taufile,/dev/null", config)
+        for line in config.splitlines():
+            if line.strip().startswith("audio_source"):
+                self.assertEqual(
+                    line, "audio_source\t\taubridge,baresipy-idle")
+        self.assertIn("module\t\t\taubridge.so", config)
+        self.assertNotIn("#module\t\t\taubridge.so", config)
+        self.assertIn("audio_player\t\taubridge,baresipy-idle", config)
         self.assertIn("audio_alert\t\taufile,/dev/null", config)
-        self.assertIn("module\t\t\tausine.so", config)
 
     def test_audio_path_dir_substitution(self):
         with tempfile.TemporaryDirectory() as tmpdir:
