@@ -25,9 +25,20 @@ config_text = render_config(audio_driver="alsa,default", headless=False,
 
 - **`audio_driver`**: value used for `audio_source`/`audio_player`/`audio_alert` when not
   headless, for example `"alsa,default"` or `"pulse,default"`.
-- **`headless`**: if `True`, do not load `alsa.so`/`pulse.so` at all. Use `ausine.so`
-  (synthesized sine wave) as the audio source and `aufile.so` (writing to `/dev/null`) as the
-  player/alert instead, so baresip runs without any sound hardware present.
+- **`headless`**: if `True`, do not load `alsa.so`/`pulse.so` at all, so baresip runs without
+  sound hardware. The audio source is `aufile.so` playing a silence wav, and the player and
+  the alert write to `/dev/null`. `aufile.so` resamples to the codec rate, so G.711 (8kHz)
+  and opus calls both work.
+  - baresip closes a call when an `aufile.so` source reaches the end of its file. `BareSIP`
+    points the source at the silence wav again shortly before the file ends, for as long as
+    the call is up.
+  - baresipy does not use `ausine.so`, because it only supports 48kHz and drops a G.711 call
+    right after answer.
+  - baresipy does not use `aubridge.so`, because it sends the remote party's audio straight
+    back to them.
+- **`silence_wav`**: path of the silence wav for the headless source. If `None`,
+  `~/.baresipy/silence.wav` is used, and written if missing. `BareSIP` passes
+  `<config_path>/silence.wav`.
 - **`audio_path`**: if a directory, patches `audio_path` to point at it (where baresip looks for
   sound prompts). If falsy but not `None`, disables sound file loading entirely
   (`audio_path /dont/load`).
@@ -65,7 +76,7 @@ BareSIP(
 | `sounds_path` | `None` | If a directory, patches `audio_path` in the config to point at it (baresip prompt sounds). If `False`, disables sound file loading. If `None` (default), leaves the config's `audio_path` untouched. |
 | `autostart` | `True` | If `True`, calls `start()` (which spawns the event-loop thread, and blocks if `block=True`) at the end of `__init__`. Set `False` to construct without starting, for example in tests. |
 | `login_options` | `None` | Extra SIP URI parameters appended to the registration line (`;login_options`), for provider-specific requirements. Only applies when `gateway` is set. |
-| `headless` | `False` | If `True`, render the config with `ausine`/`aufile` instead of a real sound driver, so no sound card is required. See [docs/setup.md](setup.md#troubleshooting). |
+| `headless` | `False` | If `True`, no sound card is required: the audio source is a silence wav at `<config_path>/silence.wav`, played through `aufile`, and re-armed before it ends while a call is up. See [docs/setup.md](setup.md#troubleshooting). |
 | `audio_driver` | `"alsa,default"` | Value used for the real audio source/player/alert when `headless=False`, for example `"pulse,default"`. |
 | `record_rx` | `False` | Enables baresip's `sndfile` module so the audio the caller sends (rx leg) is written to disk as it happens. Required for `get_rx_wav()`/`get_rx_stream()` and for `baresipy.ovos.BareSIPMicrophone`. |
 | `recording_path` | `None` | Directory `sndfile` recordings are written to when `record_rx=True`. Defaults to a fresh temp directory. |

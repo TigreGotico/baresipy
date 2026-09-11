@@ -16,7 +16,7 @@ jobs:
       - name: Install test deps
         run: pip install -e .[test]
       - name: Run the live call test
-        run: pytest test/e2e/test_call.py -m e2e -v
+        run: pytest test/e2e/test_call.py -m e2e -v -s
       - name: Dump compose logs on failure
         if: failure()
         run: docker compose -f docker-compose.e2e.yml logs || true

@@ -3,21 +3,25 @@ incoming calls, records the received (rx) audio leg to /shared/callee_rx,
 and 2s after the call is established sends back DTMF "42" so the caller can
 assert bidirectional DTMF delivery.
 
+The callee sends no audio of its own, so for the whole call its source is
+the headless idle silence. When the call ends it writes callee_rx.json:
+the rms of what it received (the caller's tone) and how many times it
+re-armed the idle source.
+
 Run inside the `callee` service of docker-compose.e2e.yml.
 """
 import threading
 import time
-from os.path import join
+from os.path import getsize, join
 
-from _common import SHARED, write_status, write_json, \
-    headless_config_with_sip_listen
-
-from baresipy import BareSIP
+from _common import SHARED, SOUND_RMS, E2EBareSIP, write_status, \
+    write_json, headless_config_with_sip_listen, codec_modules_enabled, \
+    pcm16_rms
 
 CONFIG_PATH = "/root/.baresipy_callee"
 
 
-class Callee(BareSIP):
+class Callee(E2EBareSIP):
     def __init__(self, *args, **kwargs):
         self.dtmf_received = []
         super().__init__(*args, **kwargs)
@@ -46,6 +50,20 @@ class Callee(BareSIP):
 
     def handle_call_ended(self, reason: str, number=None) -> None:
         write_status("callee", "call ended reason={0}".format(reason))
+        rx = {"rx_wav": None, "rx_wav_size": 0, "rx_rms": None,
+              "rx_has_sound": False, "idle_rearms": self.idle_rearms,
+              "end_reason": reason}
+        try:
+            rx_wav = self.get_rx_wav(timeout=5)
+            rx["rx_wav"] = rx_wav
+            if rx_wav:
+                rx["rx_wav_size"] = getsize(rx_wav)
+                rx["rx_rms"] = pcm16_rms(rx_wav)
+                rx["rx_has_sound"] = (rx["rx_rms"] or 0) > SOUND_RMS
+        except Exception as e:
+            write_status("callee", "failed to analyze rx wav: " + str(e))
+        write_json("callee_rx.json", rx)
+        write_status("callee", "rx written: " + str(rx))
 
 
 def main() -> None:
@@ -56,11 +74,13 @@ def main() -> None:
                 recording_path=join(SHARED, "callee_rx"),
                 config_path=CONFIG_PATH, autostart=True, block=True)
     write_status("callee", "spawned and ready for instructions")
+    write_json("callee_codecs.json",
+               {"callee_codec_modules": codec_modules_enabled(bs.config)})
 
     # stay up long enough for the caller container to dial in, exchange
     # audio/DTMF and hang up, then exit cleanly so `docker compose ... down`
     # (or an unexpectedly wedged run) doesn't hang forever.
-    deadline = time.time() + 90
+    deadline = time.time() + 120
     try:
         while bs.running and time.time() < deadline:
             time.sleep(1)
