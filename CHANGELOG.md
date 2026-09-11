@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.3a1](https://github.com/TigreGotico/baresipy/tree/1.2.3a1) (2026-09-11)
+
+[Full Changelog](https://github.com/TigreGotico/baresipy/compare/1.2.2a1...1.2.3a1)
+
+**Merged pull requests:**
+
+- fix: bracket the SIP URI in the AOR so account params register correctly [\#62](https://github.com/TigreGotico/baresipy/pull/62) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [1.2.2a1](https://github.com/TigreGotico/baresipy/tree/1.2.2a1) (2026-08-14)
 
 [Full Changelog](https://github.com/TigreGotico/baresipy/compare/1.2.1a1...1.2.2a1)
