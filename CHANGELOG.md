@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.3a2](https://github.com/TigreGotico/baresipy/tree/1.2.3a2) (2026-09-11)
+
+[Full Changelog](https://github.com/TigreGotico/baresipy/compare/1.2.3a1...1.2.3a2)
+
+**Merged pull requests:**
+
+- chore: remove the unused requirements file [\#64](https://github.com/TigreGotico/baresipy/pull/64) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [1.2.3a1](https://github.com/TigreGotico/baresipy/tree/1.2.3a1) (2026-09-11)
 
 [Full Changelog](https://github.com/TigreGotico/baresipy/compare/1.2.2a1...1.2.3a1)
