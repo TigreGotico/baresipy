@@ -1,3 +1,11 @@
+"""Registered-account scripted call.
+
+Dials out to a number, sends DTMF and speaks two sentences with TTS once the
+call is established, then hangs up.
+
+Required installs:
+    pip install baresipy[ovos]   # for the default speak() TTS engine
+"""
 from baresipy import BareSIP
 from time import sleep
 
@@ -26,3 +34,4 @@ while b.running:
         # b.send_audio(audio)
         b.hang()
         b.quit()
+        break

@@ -1,0 +1,22 @@
+name: E2E call test
+on:
+  pull_request:
+    branches: [dev]
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install test deps
+        run: pip install -e .[test]
+      - name: Run the live call test
+        run: pytest test/e2e/test_call.py -m e2e -v
+      - name: Dump compose logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.e2e.yml logs || true
