@@ -20,6 +20,11 @@ from shutil import which
 import signal
 import re
 
+# baresip's registration result line (src/reg.c), in 1.0.0 and in current
+# releases: "<aor>: [(prio N) ]{<index>/<transport>/<af>} <code> <reason> ...".
+# Only a 2xx in that shape is a successful registration.
+_REGISTER_OK = re.compile(r"\{\d+/\w+/\w+\} 2\d\d ")
+
 
 def _find_baresip_binary() -> str:
     """Resolve the baresip executable to run.
@@ -187,6 +192,9 @@ class BareSIP(Thread):
         self.max_login_retries = max_login_retries
         self.login_retry_delay = login_retry_delay
         self._login_retry_count = 0
+        # respawns of a baresip that keeps exiting before it is ready
+        self.max_respawns = 5
+        self._respawn_count = 0
         self.audio_frame_rate = audio_frame_rate
         self.audio_channels = audio_channels
         self.baresip = None
@@ -212,7 +220,7 @@ class BareSIP(Thread):
 
     # actions
     def do_command(self, action: str) -> None:
-        if self.ready:
+        if self.ready and self.baresip is not None:
             action = str(action)
             self.baresip.sendline(action)
         else:
@@ -220,6 +228,9 @@ class BareSIP(Thread):
             LOG.error("NOT READY! please wait")
 
     def login(self) -> None:
+        if self.baresip is None:
+            LOG.warning("login: no baresip process")
+            return
         if not self._login:
             # registrar-less mode still needs a local (non-registering)
             # user agent, or baresip can not place or receive calls
@@ -366,18 +377,30 @@ class BareSIP(Thread):
             if self.current_call:
                 self.hang()
         self.running = False
+        self.ready = False
         self.current_call = None
         self._call_status = None
         self.abort = True
         self.killBareSIPSubProcess()
+
+    def _account_aor(self) -> str:
+        """The address of record of the account this object adds to baresip."""
+        if self._login:
+            return "sip:{u}@{g}".format(u=self.user, g=self.gateway)
+        return "sip:{u}@0.0.0.0".format(u=self.user or "baresipy")
 
     def logout(self) -> None:
         """Remove every account from the running baresip.
 
         The phone re-registers by building a fresh account rather than by
         waiting for baresip to retry, so the old one has to go first or
-        baresip ends up with two.
+        baresip ends up with two. baresip 1.1.0 and later have /uadelall.
+        baresip 1.0.0 answers "command not found (uadelall)"; that reply is
+        answered with /uadel for this object's own account, which 1.0.0 has.
         """
+        if self.baresip is None:
+            LOG.warning("logout: no baresip process")
+            return
         LOG.info("Removing account: " + str(self.user))
         self.baresip.sendline("/uadelall")
 
@@ -406,6 +429,14 @@ class BareSIP(Thread):
 
     def startBareSIPSubProcess(self) -> None:
         LOG.info("Starting BareSip process")
+        # A new process has no account and no call yet: forget the state of
+        # the previous one, or login() thinks the local account exists and the
+        # phone looks ready while it cannot place or receive calls.
+        self.ready = False
+        self._local_ua_added = False
+        self.current_call = None
+        self._call_status = None
+        self._prev_output = ""
         self.baresip = pexpect.spawn(
             _find_baresip_binary() + ' -f ' + self.config_path)
 
@@ -427,6 +458,9 @@ class BareSIP(Thread):
         if mode == "keys":
             if not self.call_established:
                 LOG.error("Can't send DTMF without an active call!")
+                return
+            if self.baresip is None:
+                LOG.error("Can't send DTMF: no baresip process")
                 return
             LOG.info("Sending dtmf telephone-events for " + number)
             for n in number:
@@ -676,6 +710,7 @@ class BareSIP(Thread):
     # line parsing
     def _handle_output_line(self, out: str) -> None:
         if "baresip is ready." in out:
+            self._respawn_count = 0
             self.handle_ready()
             if not self._login:
                 # registrar-less mode: ensure a local UA exists, no
@@ -684,16 +719,22 @@ class BareSIP(Thread):
                 self.ready = True
         elif "account: No SIP accounts found" in out:
             self._handle_no_accounts()
-        elif "200 OK" in out or \
+        elif "command not found (uadelall)" in out:
+            # baresip 1.0.0 has no /uadelall; delete this object's account
+            if self.baresip is not None:
+                aor = self._account_aor()
+                LOG.info("baresip has no /uadelall, removing " + aor)
+                self.baresip.sendline("/uadel " + aor)
+        elif _REGISTER_OK.search(out) or \
                 ("All 1 useragent registered successfully!" in out
                  and not self.ready):
-            # baresip prints "All 1 useragent registered successfully!" only on
-            # the FIRST successful registration. Every later one - after a
-            # network drop, or the periodic re-REGISTER - reports success as a
-            # bare 200 OK, so keying on the friendlier line alone leaves the
-            # phone looking permanently disconnected after its first reconnect.
-            # On that first registration both lines appear, 200 OK first; the
-            # `not self.ready` guard keeps the callback from firing twice.
+            # baresip prints the registration line "{0/UDP/v4} 200 OK (...)"
+            # (src/reg.c) only when the status code changes: the first
+            # registration, and the first success after a failure, which is
+            # the reconnect case. A periodic re-REGISTER that succeeds again
+            # prints nothing. Only that line's own shape counts: other baresip
+            # lines carry "200 OK" too ("REFER reply 200 OK",
+            # "presence: notifier closed (200 OK)").
             self.ready = True
             self._login_retry_count = 0
             self.handle_login_success()
@@ -847,7 +888,18 @@ class BareSIP(Thread):
                     continue
                 if not self.baresip.isalive():
                     self.killBareSIPSubProcess()
-                    sleep(0.5)
+                    # A baresip that exits at start (a bad config, a missing
+                    # audio device) must not respawn forever. Each respawn in a
+                    # row waits twice as long, and after max_respawns the loop
+                    # stops so a supervisor sees the exit. The count resets
+                    # when a process reaches "baresip is ready.".
+                    self._respawn_count += 1
+                    if self._respawn_count > self.max_respawns:
+                        LOG.error(f"baresip exited {self._respawn_count} times "
+                                  f"in a row; giving up")
+                        self.running = False
+                        continue
+                    sleep(min(0.5 * 2 ** (self._respawn_count - 1), 30.0))
                     continue
 
                 out = self.baresip.readline().decode("utf-8")
