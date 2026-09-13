@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.2.4a1](https://github.com/TigreGotico/baresipy/tree/1.2.4a1) (2026-09-13)
+
+[Full Changelog](https://github.com/TigreGotico/baresipy/compare/1.2.3a2...1.2.4a1)
+
+**Merged pull requests:**
+
+- fix: logout on baresip 1.0.0, registration-line login match, respawn state and backoff [\#75](https://github.com/TigreGotico/baresipy/pull/75) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+- Respawn a dead baresip, logout\(\), reconnect-aware login success, loud fallback-config warning [\#21](https://github.com/TigreGotico/baresipy/pull/21) ([haricane8133](https://github.com/haricane8133))
+
 ## [1.2.3a2](https://github.com/TigreGotico/baresipy/tree/1.2.3a2) (2026-09-11)
 
 [Full Changelog](https://github.com/TigreGotico/baresipy/compare/1.2.3a1...1.2.3a2)
