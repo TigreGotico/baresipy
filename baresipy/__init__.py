@@ -102,6 +102,22 @@ class BareSIP(Thread):
             LOG.info("config loaded from " + self.config_path + "/config")
             self.updated_config = False
         else:
+            # baresipy's bundled template is still shaped for a much older
+            # baresip: jitter_buffer_delay, zrtp.so, and module_path pointing at
+            # the apt location /usr/lib/baresip/modules. On an Elixir device,
+            # where baresip is built from source and installs its modules under
+            # /usr/local, a config written from it loads no modules at all - so
+            # the phone comes up with no codecs and no audio driver, and nothing
+            # in the log says why.
+            #
+            # This should never be reached: configserv writes this file, and
+            # has baresip write itself a fresh one first if there is none. If it
+            # IS reached, the missing config is the thing to fix.
+            LOG.error(
+                "No config at %s - falling back to baresipy's bundled template, "
+                "which targets an older baresip. Save the settings once from "
+                "configserv to have the real config written.",
+                join(self.config_path, "config"))
             self.config = render_config(
                 audio_driver=audio_driver, headless=headless,
                 sip_cafile=sip_cafile,
@@ -173,7 +189,8 @@ class BareSIP(Thread):
         self._login_retry_count = 0
         self.audio_frame_rate = audio_frame_rate
         self.audio_channels = audio_channels
-        self.baresip = pexpect.spawn(_find_baresip_binary() + ' -f ' + self.config_path)
+        self.baresip = None
+        self.startBareSIPSubProcess()
         super().__init__()
         if autostart:
             self.start()
@@ -348,22 +365,49 @@ class BareSIP(Thread):
         if self.running:
             if self.current_call:
                 self.hang()
-            try:
-                self.baresip.sendline("/quit")
-            except Exception as e:
-                LOG.warning(f"failed to send /quit: {e}")
         self.running = False
         self.current_call = None
         self._call_status = None
         self.abort = True
-        try:
-            self.baresip.close()
-        except Exception as e:
-            LOG.warning(f"failed to close baresip process: {e}")
-        try:
-            self.baresip.kill(signal.SIGKILL)
-        except Exception as e:
-            LOG.debug(f"baresip process already dead: {e}")
+        self.killBareSIPSubProcess()
+
+    def logout(self) -> None:
+        """Remove every account from the running baresip.
+
+        The phone re-registers by building a fresh account rather than by
+        waiting for baresip to retry, so the old one has to go first or
+        baresip ends up with two.
+        """
+        LOG.info("Removing account: " + str(self.user))
+        self.baresip.sendline("/uadelall")
+
+    def killBareSIPSubProcess(self) -> None:
+        """Stop the baresip process, leaving this object able to start another.
+
+        Setting self.baresip back to None is what tells run() to spawn a
+        replacement. Every step is guarded because this is called on the way
+        out of an already-failing situation as often as not.
+        """
+        if self.baresip is not None and self.baresip.isalive():
+            LOG.info("Killing BareSip process")
+            try:
+                self.baresip.sendline("/quit")
+            except Exception as e:
+                LOG.warning(f"failed to send /quit: {e}")
+            try:
+                self.baresip.close()
+            except Exception as e:
+                LOG.warning(f"failed to close baresip process: {e}")
+            try:
+                self.baresip.kill(signal.SIGKILL)
+            except Exception as e:
+                LOG.debug(f"baresip process already dead: {e}")
+        self.baresip = None
+
+    def startBareSIPSubProcess(self) -> None:
+        LOG.info("Starting BareSip process")
+        self.baresip = pexpect.spawn(
+            _find_baresip_binary() + ' -f ' + self.config_path)
 
     def send_dtmf(self, number: Union[str, int],
                   mode: str = "audio") -> None:
@@ -640,7 +684,16 @@ class BareSIP(Thread):
                 self.ready = True
         elif "account: No SIP accounts found" in out:
             self._handle_no_accounts()
-        elif "All 1 useragent registered successfully!" in out:
+        elif "200 OK" in out or \
+                ("All 1 useragent registered successfully!" in out
+                 and not self.ready):
+            # baresip prints "All 1 useragent registered successfully!" only on
+            # the FIRST successful registration. Every later one - after a
+            # network drop, or the periodic re-REGISTER - reports success as a
+            # bare 200 OK, so keying on the friendlier line alone leaves the
+            # phone looking permanently disconnected after its first reconnect.
+            # On that first registration both lines appear, 200 OK first; the
+            # `not self.ready` guard keeps the callback from firing twice.
             self.ready = True
             self._login_retry_count = 0
             self.handle_login_success()
@@ -786,6 +839,17 @@ class BareSIP(Thread):
         self.running = True
         while self.running:
             try:
+                # A baresip that died takes the phone with it unless something
+                # puts it back. killBareSIPSubProcess() clears self.baresip,
+                # which is the signal to spawn a replacement on the next pass.
+                if self.baresip is None:
+                    self.startBareSIPSubProcess()
+                    continue
+                if not self.baresip.isalive():
+                    self.killBareSIPSubProcess()
+                    sleep(0.5)
+                    continue
+
                 out = self.baresip.readline().decode("utf-8")
 
                 if out != self._prev_output:
@@ -810,6 +874,12 @@ class BareSIP(Thread):
                 # nothing happened for a while
                 pass
             except KeyboardInterrupt:
+                self.running = False
+            except Exception as e:
+                # Anything not handled above. Stop rather than spin: this loop
+                # is the phone, and a tight loop on a repeating error is worse
+                # than a clean exit that systemd restarts.
+                LOG.exception(f"unhandled error in baresip loop: {e}")
                 self.running = False
 
         self.quit()
