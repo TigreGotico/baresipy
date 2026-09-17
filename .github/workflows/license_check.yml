@@ -1,0 +1,11 @@
+name: License Check
+
+on:
+  pull_request:
+    branches: [dev]
+  workflow_dispatch:
+
+jobs:
+  license_check:
+    uses: OpenVoiceOS/gh-automations/.github/workflows/license-check.yml@dev
+    secrets: inherit

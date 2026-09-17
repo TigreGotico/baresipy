@@ -1,0 +1,55 @@
+version: "3.8"
+
+# Two registrar-less headless baresip instances calling each other directly
+# by SIP URI, over a private compose network - no SIP registrar/proxy
+# involved. `callee` auto-accepts and echoes DTMF "42"; `caller` dials,
+# sends DTMF "7" + a sine-wave wav, then writes results.json to /shared for
+# test/e2e/test_call.py to assert on.
+#
+# Run directly with:
+#   docker compose -f docker-compose.e2e.yml up --build \
+#       --abort-on-container-exit --exit-code-from caller
+# or via `pytest test/ -m e2e` (test/e2e/test_call.py drives the same
+# command, using a temp dir bind-mounted at /shared).
+
+# NOTE: baresip (1.1.0, non-registering accounts) only accepts incoming
+# calls whose request-URI host is one of its own local IP addresses, so the
+# services get static IPs and the caller dials the callee's IP, not its
+# hostname.
+services:
+  callee:
+    build:
+      context: .
+      args:
+        INSTALL_EXTRAS: ""
+    command: ["python", "test/e2e/callee.py"]
+    working_dir: /app
+    volumes:
+      - ${E2E_SHARED_DIR:-./.e2e_shared}:/shared
+    networks:
+      e2e:
+        ipv4_address: 172.31.99.10
+
+  caller:
+    build:
+      context: .
+      args:
+        INSTALL_EXTRAS: ""
+    command: ["python", "test/e2e/caller.py"]
+    working_dir: /app
+    environment:
+      CALLEE_URI: "sip:callee@172.31.99.10:5060"
+    depends_on:
+      - callee
+    volumes:
+      - ${E2E_SHARED_DIR:-./.e2e_shared}:/shared
+    networks:
+      e2e:
+        ipv4_address: 172.31.99.11
+
+networks:
+  e2e:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.31.99.0/24

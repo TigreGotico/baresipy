@@ -1,3 +1,11 @@
+"""Local contact list.
+
+Demonstrates baresipy.contacts.ContactList: a local JSON-backed contact
+store (~/.baresip/contacts.db by default), independent of BareSIP itself.
+
+Required installs:
+    pip install baresipy
+"""
 from baresipy.contacts import ContactList
 
 db = ContactList()

@@ -1,0 +1,17 @@
+name: Code Coverage
+
+on:
+  pull_request:
+    branches: [dev]
+  workflow_dispatch:
+
+jobs:
+  coverage:
+    uses: OpenVoiceOS/gh-automations/.github/workflows/coverage.yml@dev
+    secrets: inherit
+    with:
+      python_version: '3.11'
+      coverage_source: 'baresipy'
+      test_path: 'test/'
+      test_extras: 'test'
+      min_coverage: 0
