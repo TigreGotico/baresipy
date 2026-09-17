@@ -1,8 +1,12 @@
 """E2E caller: a registrar-less, headless baresip instance that dials the
 `callee` service directly by SIP URI (no registrar involved), sends DTMF "7"
 and a generated sine-wave wav once established, waits for the callee's
-DTMF "42" echo, then hangs up and writes a JSON results summary that
+DTMF "42" echo, keeps the call up for several lengths of the idle silence
+file, then hangs up and writes a JSON results summary that
 test/e2e/test_call.py asserts on.
+
+What the caller receives must be silence: the callee sends no audio, so any
+sound on the caller's rx leg is its own tone coming back (an echo).
 
 Run inside the `caller` service of docker-compose.e2e.yml.
 """
@@ -13,16 +17,18 @@ from os.path import getsize, join
 
 from pydub.generators import Sine
 
-from _common import SHARED, write_status, write_json, \
-    headless_config_with_sip_listen
-
-from baresipy import BareSIP
+from _common import SHARED, SOUND_RMS, IDLE_SILENCE_SECONDS, E2EBareSIP, \
+    write_status, write_json, headless_config_with_sip_listen, \
+    codec_modules_enabled, pcm16_rms
 
 CONFIG_PATH = "/root/.baresipy_caller"
 CALLEE_URI = os.environ.get("CALLEE_URI", "sip:callee@172.31.99.10:5060")
 
+# long enough that both sides must re-arm the idle silence at least twice
+HOLD_SECONDS = 3 * IDLE_SILENCE_SECONDS + 2
 
-class Caller(BareSIP):
+
+class Caller(E2EBareSIP):
     def __init__(self, *args, **kwargs):
         self.dtmf_received = []
         self.established = False
@@ -57,11 +63,15 @@ def main() -> int:
 
     results = {
         "call_established": False,
+        "established_at_end": False,
+        "hold_seconds": HOLD_SECONDS,
         "caller_dtmf_received": [],
+        "caller_idle_rearms": 0,
         "rx_wav": None,
         "rx_wav_size": 0,
-        "rx_non_silent": False,
         "rx_rms": None,
+        "rx_has_sound": False,
+        "caller_codec_modules": None,
     }
 
     bs = Caller(user="caller", headless=True, record_rx=True,
@@ -84,37 +94,32 @@ def main() -> int:
             sine = make_sine_wav()
             bs.send_audio(sine)
 
-        # let audio/DTMF flow both ways for a while
-        time.sleep(10)
+        # keep the call up past several ends of the idle silence file; if
+        # the idle source is not re-armed, baresip closes the call here
+        time.sleep(HOLD_SECONDS)
 
         results["call_established"] = bool(bs.established)
+        results["established_at_end"] = bool(bs.call_established)
         results["caller_dtmf_received"] = list(bs.dtmf_received)
+        results["caller_idle_rearms"] = bs.idle_rearms
+        results["caller_codec_modules"] = codec_modules_enabled(bs.config)
+
+        bs.hang()
 
         rx_wav = bs.get_rx_wav(timeout=5)
         results["rx_wav"] = rx_wav
         if rx_wav:
             results["rx_wav_size"] = getsize(rx_wav)
             try:
-                # sndfile only finalizes the wav header size fields when
-                # the file is closed, so read the raw PCM past the header
-                # instead of trusting them
-                import struct
-                with open(rx_wav, "rb") as f:
-                    raw = f.read()[44:]
-                n = len(raw) // 2
-                samples = struct.unpack("<%dh" % n, raw[:n * 2])
-                rms = int((sum(s * s for s in samples) / max(1, n)) ** 0.5)
-                results["rx_rms"] = rms
-                # a genuinely silent capture has rms ~0; a real
-                # (encoded/decoded, possibly noisy) tone leg does not
-                results["rx_non_silent"] = rms > 50
+                results["rx_rms"] = pcm16_rms(rx_wav)
+                results["rx_has_sound"] = (results["rx_rms"] or 0) > SOUND_RMS
             except Exception as e:
                 write_status("caller", "failed to analyze rx wav: " + str(e))
-
-        bs.hang()
     finally:
         write_json("results.json", results)
         write_status("caller", "results written: " + str(results))
+        # let the callee write callee_rx.json after the hangup
+        time.sleep(8)
         bs.quit()
 
     return 0 if results["call_established"] else 1

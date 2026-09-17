@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+from os.path import join
 
 from baresipy.config import render_config
 
@@ -27,12 +28,20 @@ class TestRenderConfig(unittest.TestCase):
         self.assertIn("#module\t\t\talsa.so", config)
         self.assertIn("#module\t\t\tpulse.so", config)
 
-    def test_headless_uses_ausine_and_aufile(self):
-        config = render_config(headless=True)
-        self.assertIn("audio_source\t\tausine,400", config)
+    def test_headless_uses_aufile_silence_idle_source(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            silence = join(tmpdir, "silence.wav")
+            config = render_config(headless=True, silence_wav=silence)
+        for line in config.splitlines():
+            if line.strip().startswith("audio_source"):
+                self.assertEqual(line, "audio_source\t\taufile," + silence)
         self.assertIn("audio_player\t\taufile,/dev/null", config)
         self.assertIn("audio_alert\t\taufile,/dev/null", config)
-        self.assertIn("module\t\t\tausine.so", config)
+        # aubridge echoes the remote party back; ausine is 48kHz only
+        self.assertIn("#module\t\t\taubridge.so", config)
+        for line in config.splitlines():
+            self.assertNotEqual(line.strip(), "module\t\t\taubridge.so")
+            self.assertNotEqual(line.strip(), "module\t\t\tausine.so")
 
     def test_audio_path_dir_substitution(self):
         with tempfile.TemporaryDirectory() as tmpdir:

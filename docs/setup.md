@@ -122,10 +122,16 @@ working.
 
 ## Troubleshooting
 
-**No sound card / running on a server or in a container**: pass `headless=True`. This swaps
-baresip's audio source for `ausine` (a synthesized sine tone) and its player for `aufile`
-(writes to `/dev/null`), so no ALSA/PulseAudio device is required. Servers, containers, and voice
-bots all use this mode. See [docs/docker.md](docker.md).
+**No sound card / running on a server or in a container**: pass `headless=True`. No
+ALSA/PulseAudio device is then required. Servers, containers, and voice bots all use this
+mode. See [docs/docker.md](docker.md).
+
+In headless mode the audio source is a silence wav (`<config_path>/silence.wav`) played
+through baresip's `aufile` module, and the player writes to `/dev/null`. `aufile` resamples to
+the codec rate, so G.711 (8kHz) calls work. baresip closes a call when an `aufile` source
+reaches the end of its file, so `BareSIP` points the source at the silence wav again shortly
+before the file ends. baresipy does not use `ausine`, which only supports 48kHz, or `aubridge`,
+which sends the remote party's audio straight back to them.
 
 **`failed to set audio-source (Function not implemented)`** (or `No such device`): baresip
 tried to open a real sound driver that is not available in the environment. Either install or fix

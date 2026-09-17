@@ -11,7 +11,8 @@ from threading import Thread
 from typing import List, Optional, Tuple, Union
 from baresipy.utils.log import LOG
 from baresipy.tts import get_default_tts
-from baresipy.config import render_config, ensure_sndfile_recording
+from baresipy.config import render_config, ensure_sndfile_recording, \
+    ensure_silence_wav, headless_audio_source, SILENCE_SECONDS
 from baresipy.audio import WavTailReader
 from baresipy.call import CallInfo, parse_sip_uri
 from os.path import expanduser, join, isfile, isdir, getmtime
@@ -44,6 +45,12 @@ logging.getLogger("pydub.converter").setLevel("WARN")
 
 
 class BareSIP(Thread):
+    # headless idle source: length of the silence wav (seconds), and how
+    # long before its end the source is re-armed (seconds). A subclass can
+    # shorten both, eg for tests.
+    idle_silence_seconds = SILENCE_SECONDS
+    idle_rearm_margin = 5.0
+
     def __init__(self, user: Optional[str] = None, pwd: Optional[str] = None,
                  gateway: Optional[str] = None, transport: str = "udp",
                  tts: Optional[object] = None, debug: bool = False,
@@ -91,7 +98,14 @@ class BareSIP(Thread):
         if not isdir(self.config_path):
             makedirs(self.config_path)
 
-        self._default_ausrc = "ausine,400" if headless else audio_driver
+        # headless: the idle source is a silence wav played through
+        # aufile.so, re-armed before it ends (see _schedule_idle_rearm)
+        self._silence_wav = ensure_silence_wav(
+            self.config_path, seconds=self.idle_silence_seconds) \
+            if headless else None
+        self._default_ausrc = headless_audio_source(self._silence_wav) \
+            if headless else audio_driver
+        self._idle_generation = 0
 
         self.record_rx = record_rx
         self.recording_path = None
@@ -126,7 +140,8 @@ class BareSIP(Thread):
             self.config = render_config(
                 audio_driver=audio_driver, headless=headless,
                 sip_cafile=sip_cafile,
-                enable_srtp=bool(media_encryption))
+                enable_srtp=bool(media_encryption),
+                silence_wav=self._silence_wav)
             self.updated_config = True
 
         self._original_config = str(self.config)
@@ -507,12 +522,46 @@ class BareSIP(Thread):
     def handle_audio_interrupted(self) -> None:
         LOG.debug("Audio playback interrupted")
 
+    # headless idle audio source keepalive
+    def _arm_idle_source(self) -> None:
+        """Point the audio source at the idle source. In headless mode,
+        also schedule the next re-arm before the silence file ends."""
+        self.do_command("/ausrc " + self._default_ausrc)
+        self._schedule_idle_rearm()
+
+    def _schedule_idle_rearm(self) -> None:
+        """In headless mode, point the source at the silence wav again
+        shortly before the file ends. baresip closes a call when an
+        aufile source reaches the end of its file.
+
+        Every call supersedes the previous schedule: only the newest
+        timer acts."""
+        self._idle_generation += 1
+        if not self._silence_wav:
+            return
+        generation = self._idle_generation
+        delay = max(self.idle_silence_seconds - self.idle_rearm_margin, 1.0)
+        timer = threading.Timer(delay, self._rearm_idle_source,
+                                args=(generation,))
+        timer.daemon = True
+        timer.start()
+
+    def _cancel_idle_rearm(self) -> None:
+        """Make any pending idle re-arm do nothing."""
+        self._idle_generation += 1
+
+    def _rearm_idle_source(self, generation: int) -> None:
+        if generation != self._idle_generation or not self.call_established:
+            return
+        LOG.debug("re-arming the headless idle audio source")
+        self._arm_idle_source()
+
     def stop_audio(self) -> None:
         """Immediately revert the audio source, interrupting any in-flight
         `send_audio`/`speak` playback (barge-in)."""
         LOG.info("Stopping audio playback")
         self._tx_interrupted = True
-        self.do_command("/ausrc " + self._default_ausrc)
+        self._arm_idle_source()
 
     def send_audio(self, wav_file: str, block: bool = True) -> float:
         if not self.call_established:
@@ -522,6 +571,8 @@ class BareSIP(Thread):
         wav_file, duration = self.convert_audio(
             wav_file, frame_rate=self.audio_frame_rate,
             channels=self.audio_channels)
+        # the idle keepalive must not switch the source back mid-playback
+        self._cancel_idle_rearm()
         # send audio stream
         LOG.info("transmitting audio")
         self.do_command("/ausrc aufile," + wav_file)
@@ -535,7 +586,7 @@ class BareSIP(Thread):
                 sleep(0.1)
             if not self._tx_interrupted and self.call_established:
                 # avoid baresip exiting
-                self.do_command("/ausrc " + self._default_ausrc)
+                self._arm_idle_source()
         else:
             timer = threading.Timer(duration, self._revert_audio_source)
             timer.daemon = True
@@ -544,7 +595,7 @@ class BareSIP(Thread):
 
     def _revert_audio_source(self) -> None:
         if not self._tx_interrupted:
-            self.do_command("/ausrc " + self._default_ausrc)
+            self._arm_idle_source()
 
     @staticmethod
     def convert_audio(input_file: str, outfile: Optional[str] = None,
@@ -784,6 +835,8 @@ class BareSIP(Thread):
             status = "ESTABLISHED"
             self.handle_call_status(status)
             self._call_status = status
+            # the configured idle source starts with the call
+            self._schedule_idle_rearm()
             sleep(0.5)
             self.handle_call_established()
         elif "call: hold " in out:
@@ -797,6 +850,7 @@ class BareSIP(Thread):
             duration = out.split("terminated (duration: ")[1][:-1]
             self.handle_call_status(status)
             self._call_status = status
+            self._cancel_idle_rearm()
             self.handle_call_timestamp(duration)
             self.mic_muted = False
             self._finalize_call_info(reason=duration)
@@ -812,6 +866,7 @@ class BareSIP(Thread):
             status = "DISCONNECTED"
             self.handle_call_status(status)
             self._call_status = status
+            self._cancel_idle_rearm()
             self.handle_call_ended(reason, number)
             self.mic_muted = False
             self._finalize_call_info(reason=reason)
