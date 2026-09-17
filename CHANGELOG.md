@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.6a1](https://github.com/TigreGotico/baresipy/tree/1.2.6a1) (2026-09-17)
+
+[Full Changelog](https://github.com/TigreGotico/baresipy/compare/1.2.5a1...1.2.6a1)
+
+**Merged pull requests:**
+
+- fix: use silence wav instead of ausine for headless idle audio source [\#63](https://github.com/TigreGotico/baresipy/pull/63) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [1.2.5a1](https://github.com/TigreGotico/baresipy/tree/1.2.5a1) (2026-09-17)
 
 [Full Changelog](https://github.com/TigreGotico/baresipy/compare/1.2.4a1...1.2.5a1)
