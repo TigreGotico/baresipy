@@ -106,11 +106,68 @@ class TestRespawnBackoff(unittest.TestCase):
         self.assertEqual(delays, sorted(delays))
         self.assertGreater(delays[-1], delays[0])
 
-    def test_reaching_ready_resets_the_respawn_count(self):
+    def test_reaching_ready_alone_does_not_reset_the_respawn_count(self):
         bs = make_baresip(user="bob")
         bs._respawn_count = 3
         bs._handle_output_line("baresip is ready.")
-        self.assertEqual(bs._respawn_count, 0)
+        self.assertEqual(bs._respawn_count, 3)
+
+
+def ready_then_dead(*args, **kwargs):
+    """A baresip that prints "baresip is ready." once, then exits."""
+    proc = MagicMock()
+    checks = {"n": 0}
+
+    def isalive():
+        checks["n"] += 1
+        return checks["n"] <= 1
+
+    proc.isalive.side_effect = isalive
+    proc.readline.return_value = b"baresip is ready.\n"
+    return proc
+
+
+class TestRespawnAfterReady(unittest.TestCase):
+    """A baresip that dies right after ready must not respawn forever."""
+
+    def test_a_baresip_that_dies_after_ready_still_gives_up(self):
+        bs = make_baresip(user="bob")
+        delays = []
+
+        def fake_sleep(seconds):
+            delays.append(seconds)
+            if len(delays) > 50:
+                bs.running = False
+                raise AssertionError("respawned more than 50 times")
+
+        with patch.object(baresipy.pexpect, "spawn", side_effect=ready_then_dead), \
+                patch.object(baresipy, "sleep", side_effect=fake_sleep), \
+                patch("baresipy.monotonic", create=True, return_value=100.0), \
+                patch.object(bs, "quit"):
+            bs.baresip = ready_then_dead()
+            try:
+                bs.run()
+            except AssertionError:
+                pass
+        self.assertFalse(bs.running)
+        self.assertEqual(len(delays), bs.max_respawns)
+
+    def test_a_sustained_ready_period_resets_the_respawn_count(self):
+        bs = make_baresip(user="bob")
+        bs._respawn_count = 3
+        clock = iter([0.0, bs.respawn_reset_after + 1.0])
+
+        def stop(seconds):
+            bs.running = False
+
+        with patch.object(baresipy.pexpect, "spawn", side_effect=ready_then_dead), \
+                patch.object(baresipy, "sleep", side_effect=stop), \
+                patch("baresipy.monotonic", create=True, side_effect=lambda: next(clock)), \
+                patch.object(bs, "quit"):
+            bs.baresip = ready_then_dead()
+            bs.run()
+        # reset by the long ready period, then counted once for this exit
+        self.assertEqual(bs._respawn_count, 1)
 
 
 class TestCallsAfterQuit(unittest.TestCase):

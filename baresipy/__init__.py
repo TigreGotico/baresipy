@@ -1,4 +1,4 @@
-from time import sleep, time as _time
+from time import monotonic, sleep, time as _time
 import glob
 import pexpect
 from opentone import ToneGenerator
@@ -192,9 +192,13 @@ class BareSIP(Thread):
         self.max_login_retries = max_login_retries
         self.login_retry_delay = login_retry_delay
         self._login_retry_count = 0
-        # respawns of a baresip that keeps exiting before it is ready
+        # respawns of a baresip that keeps exiting. The count resets only
+        # when a process stayed ready for respawn_reset_after seconds, so a
+        # baresip that dies right after ready still gives up.
         self.max_respawns = 5
+        self.respawn_reset_after = 60.0
         self._respawn_count = 0
+        self._ready_since = None
         self.audio_frame_rate = audio_frame_rate
         self.audio_channels = audio_channels
         self.baresip = None
@@ -710,7 +714,7 @@ class BareSIP(Thread):
     # line parsing
     def _handle_output_line(self, out: str) -> None:
         if "baresip is ready." in out:
-            self._respawn_count = 0
+            self._ready_since = monotonic()
             self.handle_ready()
             if not self._login:
                 # registrar-less mode: ensure a local UA exists, no
@@ -892,7 +896,12 @@ class BareSIP(Thread):
                     # audio device) must not respawn forever. Each respawn in a
                     # row waits twice as long, and after max_respawns the loop
                     # stops so a supervisor sees the exit. The count resets
-                    # when a process reaches "baresip is ready.".
+                    # only when the dead process stayed ready for
+                    # respawn_reset_after seconds.
+                    if self._ready_since is not None and \
+                            monotonic() - self._ready_since >= self.respawn_reset_after:
+                        self._respawn_count = 0
+                    self._ready_since = None
                     self._respawn_count += 1
                     if self._respawn_count > self.max_respawns:
                         LOG.error(f"baresip exited {self._respawn_count} times "
