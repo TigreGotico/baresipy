@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.5a1](https://github.com/TigreGotico/baresipy/tree/1.2.5a1) (2026-09-17)
+
+[Full Changelog](https://github.com/TigreGotico/baresipy/compare/1.2.4a1...1.2.5a1)
+
+**Merged pull requests:**
+
+- fix: reset the respawn count only after a sustained ready period [\#77](https://github.com/TigreGotico/baresipy/pull/77) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [1.2.4a1](https://github.com/TigreGotico/baresipy/tree/1.2.4a1) (2026-09-13)
 
 [Full Changelog](https://github.com/TigreGotico/baresipy/compare/1.2.3a2...1.2.4a1)
