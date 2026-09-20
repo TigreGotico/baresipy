@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 # `baresip` provides the real SIP UA binary that baresipy wraps via pexpect.
 # `ffmpeg` is required by pydub (used for audio conversion/resampling).
